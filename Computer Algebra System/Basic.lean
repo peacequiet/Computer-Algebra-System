@@ -8,6 +8,8 @@ namespace ExpressionParsing
 #check Char.isAlphanum
 
 def opPrecedence : String → Int
+  | "(" => 15
+  | ")" => 15
   | "^" => 3
   | "*" => 2
   | "/" => 2
@@ -70,6 +72,7 @@ def removeWhitespace : List Char → List Char → List Char
 
 #eval stringAlphanumHelper "9".data
 #eval (removeWhitespace "(2+3) + (3 + 2)".data [])
+#eval (removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString)
 
 -- TODO: make better string converter (want to accommodate tokens like "sin")
 #eval Tokenizer ((removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString))
@@ -143,28 +146,30 @@ def testFunc1 : List Nat → List Nat
 
 -- gives us the updated output
 def shuntYardOpHelper : String → List String → List String → List String
-  | o₂, [], out => o₂::out
-  | o₂, o₁::ops, out =>
-    if opPrecedence o₂ > opPrecedence o₁ then
-      shuntYardOpHelper o₂ (ops) (o₁::out)
+  | o₁, [], out => out
+  | o₁, o₂::ops, out =>
+    if opPrecedence o₂ > opPrecedence o₁ && o₂ != "(" then
+      shuntYardOpHelper o₁ (ops) (o₂::out)
     else
-      o₂::out
+      out
 
 -- drop operations off opstack
 -- we could make this polymorphic. would pass condition as argument
 def shuntYardOpStackHelper : String → List String → List String
   | _, [] => []
-  | o₂, o₁::ops =>
-    if opPrecedence o₂ > opPrecedence o₁ then
-      shuntYardOpStackHelper o₂ ops
+  | o₁, o₂::ops =>
+    if opPrecedence o₂ > opPrecedence o₁ && o₂ != "(" then
+      shuntYardOpStackHelper o₁ ops
+    else if opPrecedence o₂ > opPrecedence o₁ && o₂ = "(" then
+      o₂::ops
     else
       ops
 
 -- update output after parentheses
 def sYParensHelper : String → List String → List String → List String
-  | _, [], _ => ["!", "2"]
+  | _, [], out => out
   | rp, op::ops, out =>
-    dbg_trace "{ops}"
+    -- dbg_trace "{ops}"
     if op != "(" then
       sYParensHelper rp ops (op::out)
     else
@@ -177,9 +182,11 @@ def sYParensOpStackHelper : String → List String → List String
     if op != "(" then
       sYParensOpStackHelper rp ops
     else
+      -- dbg_trace "{op}"
+      -- dbg_trace "{ops}"
       ops
 
-#eval sYParensHelper ")" ["*","+","(", "+"] []
+#eval sYParensOpStackHelper ")" ["*","+","(", "+"]
 
 /- For Shunting-Yard, the idea is, instead of using stacks, use lists like a::as
 and append directly to the head. pop the head as needed.
@@ -188,6 +195,10 @@ Notable that there is a kind of separation of concerns with respect to each argu
 Need separate helper functions for manipulating the operator stack vs. the output stack.
 
 TODO: finish parentheses logic
+useful debug:
+  dbg_trace "{t::ts}, {ops}, {out}"
+
+Outputs a reverse-postfix expression. Should create a wrapper for second reversal.
 -/
 def shuntingYard :
     List String → List String → List String → List String
@@ -206,6 +217,11 @@ def shuntingYard :
     else
       ["!", "1"]
 
+#eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString)) [] []
+
+#eval shuntingYard ["(", "3", "+", "3", ")"] [] []
+
+#eval '('.isAlphanum
 
 end ExpressionParsing
 
