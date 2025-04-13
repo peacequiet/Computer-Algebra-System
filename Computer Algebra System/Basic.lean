@@ -105,23 +105,23 @@ inductive Token
   | Parens
   | Func
 
-def Tokenizer : List String → List String
+def Tokenizer : List String → List Token
   | [] => []
   | a::as =>
     if isFunc a then
-      "func"::Tokenizer as
+      .Func::Tokenizer as
     else if isNum a then
-      "n"::Tokenizer as
+      .Num::Tokenizer as
     else if isAlpha a then
-      "v"::Tokenizer as
+      .Var::Tokenizer as
     else if isOperation a then
-      "o"::Tokenizer as
+      .Op::Tokenizer as
     else if isParentheses a then
-      "p"::Tokenizer as
+      .Parens::Tokenizer as
     else if isSpace a then
       Tokenizer as
     else
-      "!"::Tokenizer as
+      Tokenizer as
 
 
 def removeWhitespace : List Char → List Char → List Char
