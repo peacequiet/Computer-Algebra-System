@@ -7,6 +7,7 @@ namespace ExpressionParsing
 #eval String.data "Hey"
 #check Char.isAlphanum
 
+section Tokenizing
 def opPrecedence : String → Int
   | "(" => 15
   | ")" => 15
@@ -74,12 +75,28 @@ def isNum : String → Bool
   | S =>
     stringNumHelper S.data
 
+def isFunc : String → Bool
+  | "" => false
+  | s =>
+    if s.toLower = "sin" then
+      true
+    else if s.toLower = "cos" then
+      true
+    else if s.toLower = "tan" then
+      true
+    else if s.toLower = "exp" then
+      true
+    else
+      false
+
 #eval isNum "2222"
 
 def Tokenizer : List String → List String
   | [] => []
   | a::as =>
-    if isNum a then
+    if isFunc a then
+      "func"::Tokenizer as
+    else if isNum a then
       "n"::Tokenizer as
     else if isAlpha a then
       "v"::Tokenizer as
@@ -111,32 +128,36 @@ def removeWhitespaceString : List Char → List Char → List Char
     else
       removeWhitespace cs ns
 
--- Get our strings how we want them
-def makeSubstrings : List Char → List Char → List String → List String
+-- Split strings into terms
+-- TODO: accommodate functions
+def stringToTermsLogic : List Char → List Char → List String → List String
   | [], [], out => List.reverse out
-  | [], st::sts, out => makeSubstrings [] [] ([(String.mk (st::sts))] ++ out)
+  | [], st::sts, out => stringToTermsLogic [] [] ([(String.mk (st::sts))] ++ out)
   | c::cs, [], out =>
     if c.isDigit then
-      makeSubstrings cs [c] out
+      stringToTermsLogic cs [c] out
     else if c.isAlpha then
-      makeSubstrings cs [] ([(String.mk [c])] ++ out)
+      stringToTermsLogic cs [] ([(String.mk [c])] ++ out)
     else if c = ' ' then
-      makeSubstrings cs [] out
+      stringToTermsLogic cs [] out
     else
-      makeSubstrings cs [] ([(String.mk [c])] ++ out)
+      stringToTermsLogic cs [] ([(String.mk [c])] ++ out)
   | c::cs, st::sts, out =>
     if c.isDigit then
-      makeSubstrings cs (c::st::sts) out
+      stringToTermsLogic cs (c::st::sts) out
     else if c.isAlpha then
-      makeSubstrings cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+      stringToTermsLogic cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
     else if c = ' ' then
-      makeSubstrings cs (st::sts) out
+      stringToTermsLogic cs (st::sts) out
     else
-      makeSubstrings cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+      stringToTermsLogic cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
 
+def stringToTerms : String → List String
+  | "" => []
+  | string => stringToTermsLogic string.data [] []
 
 #eval String.mk ("9".data ++ ['2'])
-#eval makeSubstrings "(22222+a)+(x+22)".data [] []
+#eval stringToTerms "(22222+a)+(x+22)"
 #eval (removeWhitespace "(2+3) + (3 + 2)".data [])
 #eval (removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString)
 
@@ -211,6 +232,8 @@ def testFunc1 : List Nat → List Nat
   | [] => []
   | xs => testFunc2 xs
 
+end Tokenizing
+
 section ShuntingYard
 -- gives us the updated output
 def shuntYardOpHelper : String → List String → List String → List String
@@ -262,41 +285,46 @@ and append directly to the head. pop the head as needed.
 Notable that there is a kind of separation of concerns with respect to each argument.
 Need separate helper functions for manipulating the operator stack vs. the output stack.
 
-TODO: finish parentheses logic
 useful debug:
   dbg_trace "{t::ts}, {ops}, {out}"
 
 Outputs a reverse-postfix expression. Should create a wrapper for second reversal.
 -/
-def shuntingYard :
+
+def shuntingYardLogic :
     List String → List String → List String → List String
   | [], [], out => List.reverse out
-  | [], op::ops, out => shuntingYard [] ops (op::out)
+  | [], op::ops, out => shuntingYardLogic [] ops (op::out)
   | t::ts, ops, out =>
     if isNum t then
-      shuntingYard ts ops (t::out)
+      shuntingYardLogic ts ops (t::out)
     else if isAlpha t then
-      shuntingYard ts ops (t::out)
+      shuntingYardLogic ts ops (t::out)
     else if isOperation t then
-      shuntingYard
+      shuntingYardLogic
         ts (t::shuntYardOpStackHelper t ops) (shuntYardOpHelper t ops out)
     else if t = "(" then
-      shuntingYard ts (t::ops) out
+      shuntingYardLogic ts (t::ops) out
     else if t = ")" then
-      shuntingYard ts (sYParensOpStackHelper t ops) (sYParensHelper t ops out)
+      shuntingYardLogic ts (sYParensOpStackHelper t ops) (sYParensHelper t ops out)
     else
       ["!", "1"]
 
-#eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString)) [] []
+  def shuntingYard : List String → List String
+  | [] => []
+  | strings => shuntingYardLogic strings [] []
 
-#eval shuntingYard ["(", "a", "+", "3", ")"] [] []
+#eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString))
+
+#eval shuntingYard (stringToTermsLogic "(33+3)*(x + 3)".data [] [])
 
 #eval '('.isAlphanum
 end ShuntingYard
 end ExpressionParsing
 
 
-
+/- TODO: Rewrite the entire listToTree sequence to accommodate postfix expressions instead of infix
+-/
 namespace Tree
 open ExpressionParsing
 -- inductive BinaryTree where
@@ -354,7 +382,7 @@ def listToTree : List String → List String → BTree String →  BTree String
 -- dbg_trace "input node: {v}"
 -- dbg_trace "Current inputs: {xs}, {ts}, tree: {tree}"
 
-def exampleList := "2+4*5".data
+def exampleList := stringToTerms "a+4*5"
 def exampleListTokens := (Tokenizer exampleList)
 #eval exampleListTokens
 #check listToTree exampleList exampleListTokens .empty
