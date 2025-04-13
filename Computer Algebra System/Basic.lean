@@ -89,7 +89,21 @@ def isFunc : String → Bool
     else
       false
 
+def checkForFunc : String → Bool
+  | "sin" => true
+  | "cos" => true
+  | "tan" => true
+  | "exp" => true
+  | _ => false
+
 #eval isNum "2222"
+
+inductive Token
+  | Num
+  | Var
+  | Op
+  | Parens
+  | Func
 
 def Tokenizer : List String → List String
   | [] => []
@@ -128,36 +142,77 @@ def removeWhitespaceString : List Char → List Char → List Char
     else
       removeWhitespace cs ns
 
+-- better idea in practice. want to make it polymorphic though
+-- string data → buffer → output string
+
+def stringNumTermsLogic : List Char → List Char → List String
+  | [], [] => []
+  | [], c::cs => (String.mk (c::cs).reverse)::stringNumTermsLogic [] []
+  | t::ts, [] =>
+    if t.isDigit then
+      stringNumTermsLogic ts [t]
+    else
+      stringNumTermsLogic ts []
+  | t::ts, c::cs =>
+    if t.isDigit then
+      stringNumTermsLogic ts (t::(c::cs))
+    else
+      (String.mk (c::cs).reverse)::stringNumTermsLogic ts []
+
+def stringNumTerms : String → List String
+  | "" => []
+  | string => stringNumTermsLogic string.data []
+
+#eval stringNumTerms "323456 + (4+5) +6"
+
+
+def makeStringFunc : List Char → String
+  | [] => ""
+  | c::c'::c''::_ => (String.mk ([c] ++ [c'] ++[c'']))
+  | _::_ => "!"
+
 -- Split strings into terms
--- TODO: accommodate functions
-def stringToTermsLogic : List Char → List Char → List String → List String
-  | [], [], out => List.reverse out
-  | [], st::sts, out => stringToTermsLogic [] [] ([(String.mk (st::sts))] ++ out)
-  | c::cs, [], out =>
+/-  TODO: split this into different functions... one to tokenize a list of chars, then one
+    to build a string based on that tokenization
+
+    Better idea: declare functions that output lists of every different kind of term in the sentence,
+    parse the entire sentence into these separate lists, then reconstruct it according to a tokenization.
+-/
+
+def stringToTermsLogic : List Char → Nat → List Char → List String → List String
+  | [], _, [], out => List.reverse out
+  | [], _, st::sts, out => stringToTermsLogic [] 0 [] ([(String.mk (st::sts))] ++ out)
+  | c::cs, 0, [], out =>
     if c.isDigit then
-      stringToTermsLogic cs [c] out
+      stringToTermsLogic cs 0 [c] out
+    else if checkForFunc (makeStringFunc (c::cs)) then
+      stringToTermsLogic cs 2 [c] out
     else if c.isAlpha then
-      stringToTermsLogic cs [] ([(String.mk [c])] ++ out)
+      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
     else if c = ' ' then
-      stringToTermsLogic cs [] out
+      stringToTermsLogic cs 0 [] out
     else
-      stringToTermsLogic cs [] ([(String.mk [c])] ++ out)
-  | c::cs, st::sts, out =>
+      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
+  | c::cs, 0, st::sts, out =>
     if c.isDigit then
-      stringToTermsLogic cs (c::st::sts) out
+      stringToTermsLogic cs 0 (c::st::sts) out
+    else if checkForFunc (makeStringFunc (c::cs)) then
+      stringToTermsLogic cs 2 [c] ((String.mk (st::sts))::out)
     else if c.isAlpha then
-      stringToTermsLogic cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
     else if c = ' ' then
-      stringToTermsLogic cs (st::sts) out
+      stringToTermsLogic cs 0 (st::sts) out
     else
-      stringToTermsLogic cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+  | c::cs, Nat.succ n, strings, out =>
+    stringToTermsLogic (cs) (n) (strings ++ [c]) out
 
 def stringToTerms : String → List String
   | "" => []
-  | string => stringToTermsLogic string.data [] []
+  | string => stringToTermsLogic string.data 0 [] []
 
 #eval String.mk ("9".data ++ ['2'])
-#eval stringToTerms "(22222+a)+(x+22)"
+#eval stringToTerms "(sin(x)+a)+(x*22)"
 #eval (removeWhitespace "(2+3) + (3 + 2)".data [])
 #eval (removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString)
 
@@ -316,7 +371,7 @@ def shuntingYardLogic :
 
 #eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString))
 
-#eval shuntingYard (stringToTermsLogic "(33+3)*(x + 3)".data [] [])
+#eval shuntingYard (stringToTerms "(33+3)*(x + 3)")
 
 #eval '('.isAlphanum
 end ShuntingYard
@@ -382,7 +437,7 @@ def listToTree : List String → List String → BTree String →  BTree String
 -- dbg_trace "input node: {v}"
 -- dbg_trace "Current inputs: {xs}, {ts}, tree: {tree}"
 
-def exampleList := stringToTerms "a+4*5"
+def exampleList := stringToTerms "sin(x)+4*5"
 def exampleListTokens := (Tokenizer exampleList)
 #eval exampleListTokens
 #check listToTree exampleList exampleListTokens .empty
