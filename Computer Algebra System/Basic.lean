@@ -46,11 +46,43 @@ def alphanum : String → Bool
   | S =>
     stringAlphanumHelper S.data
 
+def stringAlphaHelper : List Char → Bool
+  | [] => true
+  | c::cs =>
+    if !c.isAlpha then
+      false
+    else
+      -- dbg_trace "{c}"
+      stringAlphaHelper cs
+
+def isAlpha : String → Bool
+  | "" => false
+  | S =>
+    stringAlphaHelper S.data
+
+def stringNumHelper : List Char → Bool
+  | [] => true
+  | c::cs =>
+    if !c.isDigit then
+      false
+    else
+      -- dbg_trace "{c}"
+      stringNumHelper cs
+
+def isNum : String → Bool
+  | "" => false
+  | S =>
+    stringNumHelper S.data
+
+#eval isNum "2222"
+
 def Tokenizer : List String → List String
   | [] => []
   | a::as =>
-    if alphanum a then
+    if isNum a then
       "n"::Tokenizer as
+    else if isAlpha a then
+      "v"::Tokenizer as
     else if isOperation a then
       "o"::Tokenizer as
     else if isParentheses a then
@@ -202,10 +234,12 @@ Outputs a reverse-postfix expression. Should create a wrapper for second reversa
 -/
 def shuntingYard :
     List String → List String → List String → List String
-  | [], [], out => out
-  | [], op::_, out => op::out
+  | [], [], out => List.reverse out
+  | [], op::ops, out => shuntingYard [] ops (op::out)
   | t::ts, ops, out =>
-    if alphanum t then
+    if isNum t then
+      shuntingYard ts ops (t::out)
+    else if isAlpha t then
       shuntingYard ts ops (t::out)
     else if isOperation t then
       shuntingYard
@@ -219,7 +253,7 @@ def shuntingYard :
 
 #eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString)) [] []
 
-#eval shuntingYard ["(", "3", "+", "3", ")"] [] []
+#eval shuntingYard ["(", "a", "+", "3", ")"] [] []
 
 #eval '('.isAlphanum
 
