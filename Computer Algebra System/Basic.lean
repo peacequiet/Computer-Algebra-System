@@ -102,7 +102,41 @@ def removeWhitespace : List Char → List Char → List Char
     else
       removeWhitespace cs ns
 
-#eval stringAlphanumHelper "9".data
+def removeWhitespaceString : List Char → List Char → List Char
+  | [], [] => []
+  | [], a => a
+  | c::cs, ns =>
+    if c != ' ' then
+      removeWhitespace cs (ns ++ [c])
+    else
+      removeWhitespace cs ns
+
+-- Get our strings how we want them
+def makeSubstrings : List Char → List Char → List String → List String
+  | [], [], out => List.reverse out
+  | [], st::sts, out => makeSubstrings [] [] ([(String.mk (st::sts))] ++ out)
+  | c::cs, [], out =>
+    if c.isDigit then
+      makeSubstrings cs [c] out
+    else if c.isAlpha then
+      makeSubstrings cs [] ([(String.mk [c])] ++ out)
+    else if c = ' ' then
+      makeSubstrings cs [] out
+    else
+      makeSubstrings cs [] ([(String.mk [c])] ++ out)
+  | c::cs, st::sts, out =>
+    if c.isDigit then
+      makeSubstrings cs (c::st::sts) out
+    else if c.isAlpha then
+      makeSubstrings cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+    else if c = ' ' then
+      makeSubstrings cs (st::sts) out
+    else
+      makeSubstrings cs [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+
+
+#eval String.mk ("9".data ++ ['2'])
+#eval makeSubstrings "(22222+a)+(x+22)".data [] []
 #eval (removeWhitespace "(2+3) + (3 + 2)".data [])
 #eval (removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString)
 
@@ -168,6 +202,7 @@ def expressionError (l : List String) : String :=
 -- #eval expressionError (Tokenizer "(2+3*a)".data)
 #eval  ([3] ++ [1, 2, 3]).head?
 
+
 def testFunc2 : List Nat → List Nat
   | [] => []
   | x::xs => 1::x::xs
@@ -176,6 +211,7 @@ def testFunc1 : List Nat → List Nat
   | [] => []
   | xs => testFunc2 xs
 
+section ShuntingYard
 -- gives us the updated output
 def shuntYardOpHelper : String → List String → List String → List String
   | o₁, [], out => out
@@ -256,7 +292,7 @@ def shuntingYard :
 #eval shuntingYard ["(", "a", "+", "3", ")"] [] []
 
 #eval '('.isAlphanum
-
+end ShuntingYard
 end ExpressionParsing
 
 
