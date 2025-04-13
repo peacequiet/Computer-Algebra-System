@@ -26,6 +26,13 @@ def isOperation (c : String) : Bool :=
   || c = "/"
   || c = "^"
 
+def isOperationChar (c : Char) : Bool :=
+  c = '+'
+  || c = '-'
+  || c = '*'
+  || c = '/'
+  || c = '^'
+
 def isParentheses (c : String) : Bool :=
   c = "("
   || c = ")"
@@ -104,66 +111,100 @@ inductive Token
   | Op
   | Parens
   | Func
+  deriving Repr, BEq
 
-def Tokenizer : List String → List Token
+#check DecidableEq
+
+def tokenToNat : Token → Nat
+  | .Num => 0
+  | .Var => 1
+  | .Op => 3
+  | .Parens => 4
+  | .Func => 5
+
+def Token.toString : Token → String
+  | Num    => "Num"
+  | Var    => "Var"
+  | Op     => "Op"
+  | Parens => "Parens"
+  | Func   => "Func"
+
+instance : ToString Token where
+  toString
+    | .Num    => "Num"
+    | .Var    => "Var"
+    | .Op     => "Op"
+    | .Parens => "Parens"
+    | .Func   => "Func"
+
+#eval List.toString
+
+instance : Repr Token where
+  reprPrec t _ := t.toString
+
+def tokenizerLogic : List String → List Token
   | [] => []
   | a::as =>
     if isFunc a then
-      .Func::Tokenizer as
+      .Func::tokenizerLogic as
     else if isNum a then
-      .Num::Tokenizer as
+      .Num::tokenizerLogic as
     else if isAlpha a then
-      .Var::Tokenizer as
+      .Var::tokenizerLogic as
     else if isOperation a then
-      .Op::Tokenizer as
+      .Op::tokenizerLogic as
     else if isParentheses a then
-      .Parens::Tokenizer as
-    else if isSpace a then
-      Tokenizer as
+      .Parens::tokenizerLogic as
     else
-      Tokenizer as
+      tokenizerLogic as
 
-
-def removeWhitespace : List Char → List Char → List Char
-  | [], [] => []
-  | [], a => a
-  | c::cs, ns =>
-    if c != ' ' then
-      removeWhitespace cs (ns ++ [c])
-    else
-      removeWhitespace cs ns
-
-def removeWhitespaceString : List Char → List Char → List Char
-  | [], [] => []
-  | [], a => a
-  | c::cs, ns =>
-    if c != ' ' then
-      removeWhitespace cs (ns ++ [c])
-    else
-      removeWhitespace cs ns
-
--- better idea in practice. want to make it polymorphic though
--- string data → buffer → output string
-
-def stringNumTermsLogic : List Char → List Char → List String
-  | [], [] => []
-  | [], c::cs => (String.mk (c::cs).reverse)::stringNumTermsLogic [] []
-  | t::ts, [] =>
-    if t.isDigit then
-      stringNumTermsLogic ts [t]
-    else
-      stringNumTermsLogic ts []
-  | t::ts, c::cs =>
-    if t.isDigit then
-      stringNumTermsLogic ts (t::(c::cs))
-    else
-      (String.mk (c::cs).reverse)::stringNumTermsLogic ts []
-
-def stringNumTerms : String → List String
+def Tokenizer : String → List Token
   | "" => []
-  | string => stringNumTermsLogic string.data []
+  | string => tokenizerLogic (string.data.map (Char.toString))
 
-#eval stringNumTerms "323456 + (4+5) +6"
+def formatStringLogic : List Char → List Char
+  | [] => []
+  | c::cs =>
+    if c.isAlphanum then
+      c::formatStringLogic cs
+    else if c = '(' || c = ')' then
+      c::formatStringLogic cs
+    else if isOperationChar c then
+      c::formatStringLogic cs
+    else
+      formatStringLogic cs
+
+def formatString : String → String
+  | "" => ""
+  | string => String.mk (formatStringLogic string.data)
+
+#eval formatString "(1131)sin(2)"
+
+-- better idea in practice. splits string into lists of component tokens, for reconstruction
+-- string data → string tokens → token → buffer → output terms
+/- TODO: accommodate functions :( -/
+def stringTermsLogic : List Char → List Token → Token → List Char → List String
+  | [], _, _, [] => []
+  | [], tokens, t, b::bs =>
+    (String.mk (b::bs).reverse)::stringTermsLogic [] tokens t []
+  | ch::chs, [], t, buff =>
+    (String.mk (buff).reverse)::stringTermsLogic [] [] t []
+  | ch::chs, to::tos, t, [] =>
+    if to == t then
+      stringTermsLogic chs tos t [ch]
+    else
+      stringTermsLogic chs (tos) t []
+  | ch::chs, to::tos, t, b::bs =>
+    if to == t then
+      stringTermsLogic chs tos t (ch::(b::bs))
+    else
+      (String.mk (b::bs).reverse)::stringTermsLogic chs (tos) t []
+
+def stringTerms : String → Token → List String
+  | "", _ => []
+  | string, t => stringTermsLogic (formatString string).data (Tokenizer string) t []
+
+#eval stringTerms "323456 + (4+5) *a" (.Op)
 
 
 def makeStringFunc : List Char → String
@@ -213,11 +254,8 @@ def stringToTerms : String → List String
 
 #eval String.mk ("9".data ++ ['2'])
 #eval stringToTerms "(sin(x)+a)+(x*22)"
-#eval (removeWhitespace "(2+3) + (3 + 2)".data [])
-#eval (removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString)
 
 -- TODO: make better string converter (want to accommodate tokens like "sin")
-#eval Tokenizer ((removeWhitespace "(2+3) + (3 + 2)".data []).map (Char.toString))
 
 def parensCount : List String → Nat
   | [] => 0
