@@ -137,30 +137,59 @@ instance : ToString Token where
     | .Parens => "Parens"
     | .Func   => "Func"
 
-#eval List.toString
 
 instance : Repr Token where
   reprPrec t _ := t.toString
-
-def tokenizerLogic : List String → List Token
-  | [] => []
-  | a::as =>
-    if isFunc a then
-      .Func::tokenizerLogic as
-    else if isNum a then
-      .Num::tokenizerLogic as
-    else if isAlpha a then
-      .Var::tokenizerLogic as
-    else if isOperation a then
-      .Op::tokenizerLogic as
-    else if isParentheses a then
-      .Parens::tokenizerLogic as
+section Lexer
+def isFuncToken : List Char → Bool
+  | [] => false
+  | c::c'::c''::_ =>
+    if (String.mk [c, c', c'']).toLower = "sin" then
+      true
+    else if (String.mk [c, c', c'']).toLower = "cos" then
+      true
+    else if (String.mk [c, c', c'']).toLower = "tan" then
+      true
+    else if (String.mk [c, c', c'']).toLower = "exp" then
+      true
     else
-      tokenizerLogic as
+      false
+  | _ =>
+    false
 
-def Tokenizer : String → List Token
+def isOpToken (c : Char) : Bool :=
+  c = '+'
+  || c = '-'
+  || c = '*'
+  || c = '/'
+  || c = '^'
+
+-- Lexer. `Nat` here is a state variable determining when to skip values (for Func tokens)
+def lexerLogic : List Char → Nat → List Token
+  | [], _ => []
+  | _::as, Nat.succ n =>
+    lexerLogic as n
+  | a::as, 0 =>
+    if isFuncToken (a::as) then
+      .Func::.Func::.Func::lexerLogic as 2
+    else if a.isDigit then
+      .Num::lexerLogic as 0
+    else if a.isAlpha then
+      .Var::lexerLogic as 0
+    else if isOpToken a then
+      .Op::lexerLogic as 0
+    else if a = '(' || a = ')' then
+      .Parens::lexerLogic as 0
+    else
+      lexerLogic as 0
+
+--TODO: Term tokenizer
+
+def Lexer : String → List Token
   | "" => []
-  | string => tokenizerLogic (string.data.map (Char.toString))
+  | string => lexerLogic (string.data) 0
+
+#eval Lexer "2+sin(x)"
 
 def formatStringLogic : List Char → List Char
   | [] => []
@@ -180,14 +209,18 @@ def formatString : String → String
 
 #eval formatString "(1131)sin(2)"
 
--- better idea in practice. splits string into lists of component tokens, for reconstruction
--- string data → string tokens → token → buffer → output terms
-/- TODO: accommodate functions :( -/
+--  better idea in practice. splits string into lists of component terms,
+--  for reconstruction
+--  string data → string tokens → token → buffer → output terms
+/-  TODO: accommodate functions :(
+          reconstruct expression (actually a nontrivial task)
+            thus we need an endomorphism
+-/
 def stringTermsLogic : List Char → List Token → Token → List Char → List String
   | [], _, _, [] => []
   | [], tokens, t, b::bs =>
     (String.mk (b::bs).reverse)::stringTermsLogic [] tokens t []
-  | ch::chs, [], t, buff =>
+  | _::_, [], t, buff =>
     (String.mk (buff).reverse)::stringTermsLogic [] [] t []
   | ch::chs, to::tos, t, [] =>
     if to == t then
@@ -202,10 +235,30 @@ def stringTermsLogic : List Char → List Token → Token → List Char → List
 
 def stringTerms : String → Token → List String
   | "", _ => []
-  | string, t => stringTermsLogic (formatString string).data (Tokenizer string) t []
+  | string, t => stringTermsLogic (formatString string).data (Lexer string) t []
 
-#eval stringTerms "323456 + (4+5) *a" (.Op)
+-- def flattenTokens : List Token → Token → List Token
+--   | [], _ => []
+--   | t₁::t₁s, t₂ =>
+--     if t₁ == t₂ then
+--       flattenTokens t₁s t₂
+--     else
+--       t₁::flattenTokens t₁s t₂
 
+def flattenTokens : List Token → List Token
+  | []  => []
+  | [t] => [t]
+  | t₁::t₂::ts =>
+    if t₁ == t₂ && t₁ != .Parens then
+      flattenTokens (t₂::ts)
+    else
+      t₁::flattenTokens (t₂::ts)
+
+
+#eval stringTerms "323456 + (4+5) *sin(x)*cos(x)" (.Func)
+#eval Lexer "323456 + (4+5) *sin(x)*cos(x)"
+#eval flattenTokens (Lexer "323456 + (4+5) *(sin(x)*cos(x))")
+end Lexer
 
 def makeStringFunc : List Char → String
   | [] => ""
