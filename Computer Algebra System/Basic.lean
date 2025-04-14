@@ -165,31 +165,31 @@ def isOpToken (c : Char) : Bool :=
   || c = '^'
 
 -- Lexer. `Nat` here is a state variable determining when to skip values (for Func tokens)
-def lexerLogic : List Char → Nat → List Token
+def makeTokensLogic : List Char → Nat → List Token
   | [], _ => []
   | _::as, Nat.succ n =>
-    lexerLogic as n
+    makeTokensLogic as n
   | a::as, 0 =>
     if isFuncToken (a::as) then
-      .Func::.Func::.Func::lexerLogic as 2
+      .Func::.Func::.Func::makeTokensLogic as 2
     else if a.isDigit then
-      .Num::lexerLogic as 0
+      .Num::makeTokensLogic as 0
     else if a.isAlpha then
-      .Var::lexerLogic as 0
+      .Var::makeTokensLogic as 0
     else if isOpToken a then
-      .Op::lexerLogic as 0
+      .Op::makeTokensLogic as 0
     else if a = '(' || a = ')' then
-      .Parens::lexerLogic as 0
+      .Parens::makeTokensLogic as 0
     else
-      lexerLogic as 0
+      makeTokensLogic as 0
 
 --TODO: Term tokenizer
 
-def Lexer : String → List Token
+def maketokens : String → List Token
   | "" => []
-  | string => lexerLogic (string.data) 0
+  | string => makeTokensLogic (string.data) 0
 
-#eval Lexer "2+sin(x)"
+#eval maketokens "2+sin(x)"
 
 def formatStringLogic : List Char → List Char
   | [] => []
@@ -216,54 +216,62 @@ def formatString : String → String
           reconstruct expression (actually a nontrivial task)
             thus we need an endomorphism
 -/
-def stringTermsLogic : List Char → List Token → Token → List Char → List String
+def stringToTermsLogic : List Char → List Token → Token → List Char → List String
   | [], _, _, [] => []
   | [], tokens, t, b::bs =>
-    (String.mk (b::bs).reverse)::stringTermsLogic [] tokens t []
+    (String.mk (b::bs).reverse)::stringToTermsLogic [] tokens t []
   | _::_, [], t, buff =>
-    (String.mk (buff).reverse)::stringTermsLogic [] [] t []
+    (String.mk (buff).reverse)::stringToTermsLogic [] [] t []
   | ch::chs, to::tos, t, [] =>
     if to == t then
-      stringTermsLogic chs tos t [ch]
+      stringToTermsLogic chs tos t [ch]
     else
-      stringTermsLogic chs (tos) t []
+      stringToTermsLogic chs (tos) t []
   | ch::chs, to::tos, t, b::bs =>
     if to == t then
-      stringTermsLogic chs tos t (ch::(b::bs))
+      stringToTermsLogic chs tos t (ch::(b::bs))
     else
-      (String.mk (b::bs).reverse)::stringTermsLogic chs (tos) t []
+      (String.mk (b::bs).reverse)::stringToTermsLogic chs (tos) t []
 
-def stringTerms : String → Token → List String
-  | "", _ => []
-  | string, t => stringTermsLogic (formatString string).data (Lexer string) t []
+def stringToTerms : String → Token → List String
+  | string, t => stringToTermsLogic (formatString string).data (maketokens string) t []
 
--- def flattenTokens : List Token → Token → List Token
---   | [], _ => []
---   | t₁::t₁s, t₂ =>
---     if t₁ == t₂ then
---       flattenTokens t₁s t₂
---     else
---       t₁::flattenTokens t₁s t₂
+-- Flattens tokens using a buffer, in a similar manner to stringTerms above
+def flattenTokensLogic : List Token → List Token →  List Token
+  | [], []=> []
+  | [], t::_ => t::flattenTokensLogic [] []
+  | t₁::ts, [] =>
+      flattenTokensLogic ts [t₁]
+  | t₁::ts, t₂::_ =>
+    if t₁ == t₂ && t₁ != .Parens then
+      flattenTokensLogic ts [t₁]
+    else
+      t₂::flattenTokensLogic ts [t₁]
+  termination_by args1 args2 => (args1.length, args2.length)
 
 def flattenTokens : List Token → List Token
-  | []  => []
-  | [t] => [t]
-  | t₁::t₂::ts =>
-    if t₁ == t₂ && t₁ != .Parens then
-      flattenTokens (t₂::ts)
-    else
-      t₁::flattenTokens (t₂::ts)
+  | tokens => flattenTokensLogic tokens []
 
+#eval stringToTerms "323456 + (4+5) *sin(x)*cos(x)" (.Func)
+#eval maketokens "323456 + (4+5) *sin(x)*cos(x)"
+#eval flattenTokens (maketokens "323456 + (4+5) *(sin(x)*cos(x))")
 
-#eval stringTerms "323456 + (4+5) *sin(x)*cos(x)" (.Func)
-#eval Lexer "323456 + (4+5) *sin(x)*cos(x)"
-#eval flattenTokens (Lexer "323456 + (4+5) *(sin(x)*cos(x))")
+/-
+  TODO: Complete lexer
+    Idea: Take in a string, its tokens, and a list with empty entries of the same length
+          as the list of tokens. Then, for each token enum, insert the strings in order
+          in the appropriate slot (given by the list of tokens)
+-/
+def Lexer : String → List Token → List String → List String
+  | "", _ => []
+  | string, t::ts =>
+
 end Lexer
 
-def makeStringFunc : List Char → String
-  | [] => ""
-  | c::c'::c''::_ => (String.mk ([c] ++ [c'] ++[c'']))
-  | _::_ => "!"
+-- def makeStringFunc : List Char → String
+--   | [] => ""
+--   | c::c'::c''::_ => (String.mk ([c] ++ [c'] ++[c'']))
+--   | _::_ => "!"
 
 -- Split strings into terms
 /-  TODO: split this into different functions... one to tokenize a list of chars, then one
@@ -273,37 +281,37 @@ def makeStringFunc : List Char → String
     parse the entire sentence into these separate lists, then reconstruct it according to a tokenization.
 -/
 
-def stringToTermsLogic : List Char → Nat → List Char → List String → List String
-  | [], _, [], out => List.reverse out
-  | [], _, st::sts, out => stringToTermsLogic [] 0 [] ([(String.mk (st::sts))] ++ out)
-  | c::cs, 0, [], out =>
-    if c.isDigit then
-      stringToTermsLogic cs 0 [c] out
-    else if checkForFunc (makeStringFunc (c::cs)) then
-      stringToTermsLogic cs 2 [c] out
-    else if c.isAlpha then
-      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
-    else if c = ' ' then
-      stringToTermsLogic cs 0 [] out
-    else
-      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
-  | c::cs, 0, st::sts, out =>
-    if c.isDigit then
-      stringToTermsLogic cs 0 (c::st::sts) out
-    else if checkForFunc (makeStringFunc (c::cs)) then
-      stringToTermsLogic cs 2 [c] ((String.mk (st::sts))::out)
-    else if c.isAlpha then
-      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
-    else if c = ' ' then
-      stringToTermsLogic cs 0 (st::sts) out
-    else
-      stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
-  | c::cs, Nat.succ n, strings, out =>
-    stringToTermsLogic (cs) (n) (strings ++ [c]) out
+-- def stringToTermsLogic : List Char → Nat → List Char → List String → List String
+--   | [], _, [], out => List.reverse out
+--   | [], _, st::sts, out => stringToTermsLogic [] 0 [] ([(String.mk (st::sts))] ++ out)
+--   | c::cs, 0, [], out =>
+--     if c.isDigit then
+--       stringToTermsLogic cs 0 [c] out
+--     else if checkForFunc (makeStringFunc (c::cs)) then
+--       stringToTermsLogic cs 2 [c] out
+--     else if c.isAlpha then
+--       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
+--     else if c = ' ' then
+--       stringToTermsLogic cs 0 [] out
+--     else
+--       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
+--   | c::cs, 0, st::sts, out =>
+--     if c.isDigit then
+--       stringToTermsLogic cs 0 (c::st::sts) out
+--     else if checkForFunc (makeStringFunc (c::cs)) then
+--       stringToTermsLogic cs 2 [c] ((String.mk (st::sts))::out)
+--     else if c.isAlpha then
+--       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+--     else if c = ' ' then
+--       stringToTermsLogic cs 0 (st::sts) out
+--     else
+--       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
+--   | c::cs, Nat.succ n, strings, out =>
+--     stringToTermsLogic (cs) (n) (strings ++ [c]) out
 
-def stringToTerms : String → List String
-  | "" => []
-  | string => stringToTermsLogic string.data 0 [] []
+-- def stringToTerms : String → List String
+--   | "" => []
+--   | string => stringToTermsLogic string.data 0 [] []
 
 #eval String.mk ("9".data ++ ['2'])
 #eval stringToTerms "(sin(x)+a)+(x*22)"
@@ -434,7 +442,6 @@ Need separate helper functions for manipulating the operator stack vs. the outpu
 useful debug:
   dbg_trace "{t::ts}, {ops}, {out}"
 
-Outputs a reverse-postfix expression. Should create a wrapper for second reversal.
 -/
 
 def shuntingYardLogic :
