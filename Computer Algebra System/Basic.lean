@@ -263,8 +263,8 @@ def flattenTokens : List Token → List Token
           in the appropriate slot (given by the list of tokens)
 -/
 def Lexer : String → List Token → List String → List String
-  | "", _ => []
-  | string, t::ts =>
+  | "", _, _, _ => []
+  | string, t::ts, _, _ => _
 
 end Lexer
 
