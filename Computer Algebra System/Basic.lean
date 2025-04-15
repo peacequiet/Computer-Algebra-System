@@ -186,7 +186,6 @@ def makeTokensLogic : List Char → Nat → List Token
 --TODO: Term tokenizer
 
 def maketokens : String → List Token
-  | "" => []
   | string => makeTokensLogic (string.data) 0
 
 #eval maketokens "2+sin(x)"
@@ -204,7 +203,6 @@ def formatStringLogic : List Char → List Char
       formatStringLogic cs
 
 def formatString : String → String
-  | "" => ""
   | string => String.mk (formatStringLogic string.data)
 
 #eval formatString "(1131)sin(2)"
@@ -236,6 +234,9 @@ def stringToTermsLogic : List Char → List Token → Token → List Char → Li
 def stringToTerms : String → Token → List String
   | string, t => stringToTermsLogic (formatString string).data (maketokens string) t []
 
+-- def stringToTermsGetTerm : String → Token → String
+-- -- TODO: function to create a list of lists of terms
+
 -- Flattens tokens using a buffer, in a similar manner to stringTerms above
 def flattenTokensLogic : List Token → List Token →  List Token
   | [], []=> []
@@ -261,57 +262,59 @@ def flattenTokens : List Token → List Token
     Idea: Take in a string, its tokens, and a list with empty entries of the same length
           as the list of tokens. Then, for each token enum, insert the strings in order
           in the appropriate slot (given by the list of tokens)
+    TODO: helper function for all the damn lists so as to not clutter the type signature
+          IDEA: What if we have a list of lists of tokens... we prove that such a list of lists will have as
+                many entries as there are terms of type "Token," and we prove that indexes correspond
+                to particular terms, then we rebuild the lexer?
 -/
-def Lexer : String → List Token → List String → List String
-  | "", _, _, _ => []
-  | string, t::ts, _, _ => _
+
+structure lexerEnv (s : String) where
+  s : String
+  nums : List String
+  vars : List String
+  ops : List String
+  parens : List String
+  funcs : List String
+  deriving Repr
+
+def testLex : lexerEnv :=
+  { nums := stringToTerms "12" (.Num),
+    vars := stringToTerms "12" (.Var)
+    ops := stringToTerms "12" (.Op)
+    parens := stringToTerms "12" (.Parens)
+    funcs := stringToTerms "12" (.Func)}
+
+def mkLexerEnv : String → lexerEnv
+  | s =>
+
+
+-- def lexerLogic : String → List Token → List String → List String → List String → List String → List String → List String
+--   | "", _, _, _, _, _, _ => ["!", "1"]
+--   | string, t::ts, num::nums, var::vars, op::ops, parens::parens', func::funcs =>
+--     if t == .Num then
+--       num::lexerLogic string ts nums (var::vars) (op::ops) (parens::parens') (func::funcs)
+--     else if t == .Var then
+--       var::lexerLogic string ts (num::nums) (vars) (op::ops) (parens::parens') (func::funcs)
+--     else if t == .Op then
+--       op::lexerLogic string ts (num::nums) (var::vars) (ops) (parens::parens') (func::funcs)
+--     else if t == .Parens then
+--       parens::lexerLogic string ts (num::nums) (var::vars) (op::ops) (parens') (func::funcs)
+--     else
+--       func::lexerLogic string ts (num::nums) (var::vars) (op::ops) (parens::parens') (funcs)
+
+def lexer : String → List Token → List String
+  | "", _=> []
+  | _, [] => ["complete"]
+  | string, t::ts=>
+    if h : stringToTerms string t ≠ [] then
+      ((stringToTerms string t).head (h))::lexer string ts
+    else
+      "!"::lexer string ts
+
+#eval lexer "323456 + (4+5) *sin(x)*cos(x)" (flattenTokens (maketokens "323456 + (4+5) *sin(x)*cos(x)"))
+-- yeah... we need to get the individual lists out
 
 end Lexer
-
--- def makeStringFunc : List Char → String
---   | [] => ""
---   | c::c'::c''::_ => (String.mk ([c] ++ [c'] ++[c'']))
---   | _::_ => "!"
-
--- Split strings into terms
-/-  TODO: split this into different functions... one to tokenize a list of chars, then one
-    to build a string based on that tokenization
-
-    Better idea: declare functions that output lists of every different kind of term in the sentence,
-    parse the entire sentence into these separate lists, then reconstruct it according to a tokenization.
--/
-
--- def stringToTermsLogic : List Char → Nat → List Char → List String → List String
---   | [], _, [], out => List.reverse out
---   | [], _, st::sts, out => stringToTermsLogic [] 0 [] ([(String.mk (st::sts))] ++ out)
---   | c::cs, 0, [], out =>
---     if c.isDigit then
---       stringToTermsLogic cs 0 [c] out
---     else if checkForFunc (makeStringFunc (c::cs)) then
---       stringToTermsLogic cs 2 [c] out
---     else if c.isAlpha then
---       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
---     else if c = ' ' then
---       stringToTermsLogic cs 0 [] out
---     else
---       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ out)
---   | c::cs, 0, st::sts, out =>
---     if c.isDigit then
---       stringToTermsLogic cs 0 (c::st::sts) out
---     else if checkForFunc (makeStringFunc (c::cs)) then
---       stringToTermsLogic cs 2 [c] ((String.mk (st::sts))::out)
---     else if c.isAlpha then
---       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
---     else if c = ' ' then
---       stringToTermsLogic cs 0 (st::sts) out
---     else
---       stringToTermsLogic cs 0 [] ([(String.mk [c])] ++ (String.mk (st::sts))::out)
---   | c::cs, Nat.succ n, strings, out =>
---     stringToTermsLogic (cs) (n) (strings ++ [c]) out
-
--- def stringToTerms : String → List String
---   | "" => []
---   | string => stringToTermsLogic string.data 0 [] []
 
 #eval String.mk ("9".data ++ ['2'])
 #eval stringToTerms "(sin(x)+a)+(x*22)"
