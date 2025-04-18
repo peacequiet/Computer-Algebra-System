@@ -164,7 +164,8 @@ def isOpToken (c : Char) : Bool :=
   || c = '/'
   || c = '^'
 
--- Lexer. `Nat` here is a state variable determining when to skip values (for Func tokens)
+-- pre-lexer. `Nat` here is a state variable determining when to skip values (for Func tokens)
+-- gets a char-by-char tokenization of a list of chars
 def makeTokensLogic : List Char → Nat → List Token
   | [], _ => []
   | _::as, Nat.succ n =>
@@ -183,7 +184,8 @@ def makeTokensLogic : List Char → Nat → List Token
     else
       makeTokensLogic as 0
 
---TODO: Term tokenizer
+-- TODO: check whether neighboring characters are valid/syntactic validity of string
+-- TODO: auto-insert multiplication
 
 def maketokens : String → List Token
   | string => makeTokensLogic (string.data) 0
@@ -202,6 +204,7 @@ def formatStringLogic : List Char → List Char
     else
       formatStringLogic cs
 
+-- filters out all invalid characters before transforming string into terms
 def formatString : String → String
   | string => String.mk (formatStringLogic string.data)
 
@@ -253,8 +256,11 @@ def flattenTokensLogic : List Token → List Token →  List Token
 def flattenTokens : List Token → List Token
   | tokens => flattenTokensLogic tokens []
 
+def createFlatTokens : String → List Token
+  | string => flattenTokens (maketokens string)
+
 #eval stringToTerms "323456 + (4+5) *sin(x)*cos(x)" (.Func)
-#eval maketokens "323456 + (4+5) *sin(x)*cos(x)"
+#eval createFlatTokens "323456 + (4+5) *(sin(x)*cos(x))"
 #eval flattenTokens (maketokens "323456 + (4+5) *(sin(x)*cos(x))")
 
 /-
@@ -268,8 +274,8 @@ def flattenTokens : List Token → List Token
                 to particular terms, then we rebuild the lexer?
 -/
 
-structure lexerEnv (s : String) where
-  s : String
+-- stores a record of all valid terms in string
+structure lexerEnv where
   nums : List String
   vars : List String
   ops : List String
@@ -277,49 +283,53 @@ structure lexerEnv (s : String) where
   funcs : List String
   deriving Repr
 
-def testLex : lexerEnv :=
-  { nums := stringToTerms "12" (.Num),
-    vars := stringToTerms "12" (.Var)
-    ops := stringToTerms "12" (.Op)
-    parens := stringToTerms "12" (.Parens)
-    funcs := stringToTerms "12" (.Func)}
+def lexerEnv.create : String → lexerEnv
+  | string => { nums := stringToTerms string (.Num)
+                vars := stringToTerms string (.Var)
+                ops := stringToTerms string (.Op)
+                parens := stringToTerms string (.Parens)
+                funcs := stringToTerms string (.Func) }
 
-def mkLexerEnv : String → lexerEnv
-  | s =>
+#eval lexerEnv.create "323456 + (4+5) *sin(x)*cos(x)"
 
+def lexerLogic : List Token → lexerEnv → List String
+  | [], _ => []
+  | t::ts, env =>
+    match t with
+    | .Num =>
+      match env.nums with
+      | [] => []
+      | num::nums' => num::lexerLogic ts {env with nums := nums'}
+    | .Var =>
+      match env.vars with
+      | [] => []
+      | var::vars' => var::lexerLogic ts {env with vars := vars'}
+    | .Op =>
+      match env.ops with
+      | [] => []
+      | op::ops' => op::lexerLogic ts {env with ops := ops'}
+    | .Parens =>
+      match env.parens with
+      | [] => []
+      | p::parens' => p::lexerLogic ts {env with parens := parens'}
+    | .Func =>
+      match env.funcs with
+      | [] => []
+      | func::funcs' => func::lexerLogic ts {env with funcs := funcs'}
 
--- def lexerLogic : String → List Token → List String → List String → List String → List String → List String → List String
---   | "", _, _, _, _, _, _ => ["!", "1"]
---   | string, t::ts, num::nums, var::vars, op::ops, parens::parens', func::funcs =>
---     if t == .Num then
---       num::lexerLogic string ts nums (var::vars) (op::ops) (parens::parens') (func::funcs)
---     else if t == .Var then
---       var::lexerLogic string ts (num::nums) (vars) (op::ops) (parens::parens') (func::funcs)
---     else if t == .Op then
---       op::lexerLogic string ts (num::nums) (var::vars) (ops) (parens::parens') (func::funcs)
---     else if t == .Parens then
---       parens::lexerLogic string ts (num::nums) (var::vars) (op::ops) (parens') (func::funcs)
---     else
---       func::lexerLogic string ts (num::nums) (var::vars) (op::ops) (parens::parens') (funcs)
+-- reconstructs valid expression out of terms
+def lexer : String → List String
+  | string =>
+    lexerLogic (createFlatTokens string) (.create string)
 
-def lexer : String → List Token → List String
-  | "", _=> []
-  | _, [] => ["complete"]
-  | string, t::ts=>
-    if h : stringToTerms string t ≠ [] then
-      ((stringToTerms string t).head (h))::lexer string ts
-    else
-      "!"::lexer string ts
-
-#eval lexer "323456 + (4+5) *sin(x)*cos(x)" (flattenTokens (maketokens "323456 + (4+5) *sin(x)*cos(x)"))
--- yeah... we need to get the individual lists out
+#eval lexerLogic (flattenTokens (maketokens "323456 + (4+5) *sin(x)*cos(x)")) (lexerEnv.create "323456 + (4+5) *sin(x)*cos(x)")
+#eval (flattenTokens (maketokens "323456 + (4+5) *sin(x)*cos(x)"))
+#eval lexer "sin(x + 2)*cos(x + 9)/2"
 
 end Lexer
 
 #eval String.mk ("9".data ++ ['2'])
 #eval stringToTerms "(sin(x)+a)+(x*22)"
-
--- TODO: make better string converter (want to accommodate tokens like "sin")
 
 def parensCount : List String → Nat
   | [] => 0
@@ -355,7 +365,7 @@ def neighborTerm : List String → String → Bool
       neighborTerm ts c
 
 -- Verifies whether expression is well-formed, sends error code
--- use except monad
+-- use except monad?
 #check Except
 
 def expressionError (l : List String) : String :=
@@ -470,9 +480,7 @@ def shuntingYardLogic :
   | [] => []
   | strings => shuntingYardLogic strings [] []
 
-#eval shuntingYard ((removeWhitespace "(3+3)*(2 + 3)".data []).map (Char.toString))
-
-#eval shuntingYard (stringToTerms "(33+3)*(x + 3)")
+#eval shuntingYard (lexer "(33+3)*(x + 3)*(0)*sin(34)")
 
 #eval '('.isAlphanum
 end ShuntingYard
