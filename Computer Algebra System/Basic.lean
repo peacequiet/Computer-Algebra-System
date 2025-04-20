@@ -1,5 +1,9 @@
 -- TODO: Shunting-Yard is unavoidable, but we can definitely do it
+import Lean.Expr
+import Lean.ToExpr
+
 namespace ExpressionParsing
+open Lean
 #check String
 #check List
 
@@ -186,6 +190,7 @@ def makeTokensLogic : List Char → Nat → List Token
 
 -- TODO: check whether neighboring characters are valid/syntactic validity of string
 -- TODO: auto-insert multiplication
+-- And maybe some proofs about the kinds of values that are allowed in?
 
 def maketokens : String → List Token
   | string => makeTokensLogic (string.data) 0
@@ -210,13 +215,8 @@ def formatString : String → String
 
 #eval formatString "(1131)sin(2)"
 
---  better idea in practice. splits string into lists of component terms,
---  for reconstruction
+--  splits string into lists of component terms,
 --  string data → string tokens → token → buffer → output terms
-/-  TODO: accommodate functions :(
-          reconstruct expression (actually a nontrivial task)
-            thus we need an endomorphism
--/
 def stringToTermsLogic : List Char → List Token → Token → List Char → List String
   | [], _, _, [] => []
   | [], tokens, t, b::bs =>
@@ -234,11 +234,9 @@ def stringToTermsLogic : List Char → List Token → Token → List Char → Li
     else
       (String.mk (b::bs).reverse)::stringToTermsLogic chs (tos) t []
 
+-- transforms a string into constituent terms
 def stringToTerms : String → Token → List String
   | string, t => stringToTermsLogic (formatString string).data (maketokens string) t []
-
--- def stringToTermsGetTerm : String → Token → String
--- -- TODO: function to create a list of lists of terms
 
 -- Flattens tokens using a buffer, in a similar manner to stringTerms above
 def flattenTokensLogic : List Token → List Token →  List Token
@@ -263,16 +261,7 @@ def createFlatTokens : String → List Token
 #eval createFlatTokens "323456 + (4+5) *(sin(x)*cos(x))"
 #eval flattenTokens (maketokens "323456 + (4+5) *(sin(x)*cos(x))")
 
-/-
-  TODO: Complete lexer
-    Idea: Take in a string, its tokens, and a list with empty entries of the same length
-          as the list of tokens. Then, for each token enum, insert the strings in order
-          in the appropriate slot (given by the list of tokens)
-    TODO: helper function for all the damn lists so as to not clutter the type signature
-          IDEA: What if we have a list of lists of tokens... we prove that such a list of lists will have as
-                many entries as there are terms of type "Token," and we prove that indexes correspond
-                to particular terms, then we rebuild the lexer?
--/
+#check ToExpr Nat
 
 -- stores a record of all valid terms in string
 structure lexerEnv where
@@ -317,7 +306,17 @@ def lexerLogic : List Token → lexerEnv → List String
       | [] => []
       | func::funcs' => func::lexerLogic ts {env with funcs := funcs'}
 
+/-
+  TODO: Complete lexer -- COMPLETE
+    Idea: Take in a string, its tokens, and a list with empty entries of the same length
+          as the list of tokens. Then, for each token enum, insert the strings in order
+          in the appropriate slot (given by the list of tokens)
+    Post-mortem: We used a structure to ensure the type signature did not get too cluttered.
+                  But because the operation is repeated, I'm left wondering if there is a
+                  more elegant way to do this.
+-/
 -- reconstructs valid expression out of terms
+
 def lexer : String → List String
   | string =>
     lexerLogic (createFlatTokens string) (.create string)
